@@ -1,0 +1,95 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: promptscope-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secure_local_db_password_2026
+      POSTGRES_DB: promptscope
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - database_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d promptscope"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  chromadb:
+    image: chromadb/chroma:0.4.24
+    container_name: promptscope-chromadb
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - chromadb_data:/chroma/data
+    networks:
+      - ai_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: promptscope-backend
+    restart: always
+    environment:
+      - ENV=development
+      - DEBUG=true
+      - DATABASE_URL=postgresql+asyncpg://postgres:secure_local_db_password_2026@db:5432/promptscope
+      - FIREBASE_PROJECT_ID=ai-studio-a00f3103-1467-4019-a12d-7dd95785e909
+    ports:
+      - "8080:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    networks:
+      - database_network
+      - ai_network
+      - ingress_network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: promptscope-frontend
+    restart: always
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - APP_URL=http://localhost:3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - ingress_network
+
+volumes:
+  postgres_data:
+    driver: local
+  chromadb_data:
+    driver: local
+
+networks:
+  ingress_network:
+    driver: bridge
+  database_network:
+    driver: bridge
+    internal: true # Network isolation: DB is not accessible from the public network
+  ai_network:
+    driver: bridge
+    internal: true # Network isolation: ChromaDB vector DB is internal

@@ -1,0 +1,6 @@
+{
+  "name": "PromptScope",
+  "description": "An intelligent prompt analytics and optimization platform for analyzing quality, token usage, cost, and semantic similarities of generative AI prompts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

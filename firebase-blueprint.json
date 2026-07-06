@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile information and user preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID" },
+        "email": { "type": "string", "description": "User's email address" },
+        "displayName": { "type": "string", "description": "User's displayed name" },
+        "photoURL": { "type": "string", "description": "URL to user's profile picture" },
+        "organization": { "type": "string", "description": "User's organization name" },
+        "role": { "type": "string", "description": "User's role in organization" },
+        "bio": { "type": "string", "description": "User's profile biography" },
+        "preferences": {
+          "type": "object",
+          "description": "User preferences layout",
+          "properties": {
+            "defaultModel": { "type": "string" },
+            "theme": { "type": "string" },
+            "apiUsageLimit": { "type": "number" }
+          },
+          "required": ["defaultModel", "theme", "apiUsageLimit"]
+        },
+        "createdAt": { "type": "string", "description": "ISO timestamp of profile creation" }
+      },
+      "required": ["uid", "email", "displayName", "photoURL", "organization", "role", "bio", "preferences", "createdAt"]
+    },
+    "PromptExecution": {
+      "title": "PromptExecution",
+      "description": "Recorded playground prompt executions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique execution document ID" },
+        "userId": { "type": "string", "description": "UID of the user who initiated execution" },
+        "promptText": { "type": "string", "description": "The raw input prompt" },
+        "systemInstruction": { "type": "string", "description": "The system instructions provided" },
+        "category": { "type": "string", "description": "Category categorization" },
+        "timestamp": { "type": "string", "description": "ISO timestamp of execution" },
+        "modelsUsed": { "type": "array", "description": "List of model IDs selected" },
+        "responses": { "type": "array", "description": "Execution response payloads per model" },
+        "averageLatencyMs": { "type": "number", "description": "Average latency of responses" },
+        "totalTokens": { "type": "number", "description": "Total tokens consumed across models" },
+        "totalCostUsd": { "type": "number", "description": "Total estimated cost of the run" },
+        "isFavorite": { "type": "boolean", "description": "Whether run is marked as favorite" }
+      },
+      "required": ["userId", "promptText", "category", "timestamp", "modelsUsed", "responses", "averageLatencyMs", "totalTokens", "totalCostUsd"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Secure storage of individual user profiles, restricted to the profile owner"
+    },
+    "executions/{executionId}": {
+      "schema": "PromptExecution",
+      "description": "Playground execution records, restricted to the initiating user"
+    }
+  }
+}

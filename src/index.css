@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@theme {
+  --color-sage: #8FAF9B;
+  --color-sand: #D8B56A;
+  --color-cream: #FAF8F3;
+  --color-forest: #2F3A33;
+  --color-forest-light: #6B7C72; /* Muted Sage Gray #6B7C72 */
+  --color-sage-soft: #C2D3C7;
+  --color-card: #FFFFFF;
+  --color-surface: #FFFFFF;
+  --color-border-main: #D8E1DA;
+  --color-success: #5B8A72;
+  --color-warning: #C28A2B;
+  --color-error: #B85C4A;
+}
+
+:root {
+  --color-sage-val: #8FAF9B;
+  --color-sand-val: #D8B56A;
+  --color-cream-val: #FAF8F3;
+  --color-forest-val: #2F3A33;
+  --color-forest-light-val: #6B7C72;
+  --color-sage-soft-val: #C2D3C7;
+  --color-card-val: #FFFFFF;
+  --color-surface-val: #FFFFFF;
+  --color-border-val: #D8E1DA;
+}
+
+@layer base {
+  body {
+    background-color: #FAF8F3;
+    color: #2F3A33;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #FAF8F3;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C2D3C7;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #8FAF9B;
+}
+
+/* Fade In animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Glass panel */
+.nature-glass {
+  background: rgba(250, 248, 243, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(143, 175, 155, 0.25);
+}
