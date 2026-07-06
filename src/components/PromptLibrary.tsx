@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { safeJson } from "../utils";
 import { 
   Search, 
   Plus, 
@@ -48,7 +49,7 @@ export const PromptLibrary: React.FC = () => {
   const fetchTemplates = async () => {
     try {
       const res = await fetch("/api/templates");
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.success) {
         setTemplates(data.templates);
         if (data.templates.length > 0 && !selectedTpl) {
@@ -92,7 +93,7 @@ export const PromptLibrary: React.FC = () => {
           tags: newTags ? newTags.split(",").map(t => t.trim()) : undefined
         })
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.success) {
         setTemplates(prev => [data.template, ...prev]);
         setSelectedTpl(data.template);
@@ -118,7 +119,7 @@ export const PromptLibrary: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id })
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.success) {
         setTemplates(prev => [data.template, ...prev]);
         setSelectedTpl(data.template);

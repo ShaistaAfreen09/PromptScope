@@ -68,7 +68,7 @@ export class PromptExecutor {
       id: "exec_" + Math.random().toString(36).substring(2, 11),
       userId,
       promptText,
-      systemInstruction,
+      systemInstruction: systemInstruction || "",
       category,
       timestamp: new Date().toISOString(),
       modelsUsed: selectedModels,

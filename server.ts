@@ -170,8 +170,8 @@ Prompt Text: "${promptText}"`,
       });
 
     } catch (err: any) {
-      console.warn("Gemini live execution notice: API currently busy or unavailable. Activating secure prompt sandbox fallback engine.");
-      // Fall back gracefully to local analysis rather than crashing
+      console.log("Gemini live analysis unavailable or rate-limited. Activating local analysis fallback.");
+      // Fall through to mock output by letting execution proceed
     }
   }
 
@@ -261,7 +261,8 @@ Optimization Target Goal: "${targetGoal || "General quality, clear phrasing, and
       });
 
     } catch (err: any) {
-      console.warn("Gemini optimization notice: API currently busy or unavailable. Activating secure prompt optimizer fallback engine.");
+      console.log("Gemini optimization unavailable or rate-limited. Activating local optimization fallback.");
+      // Fall through to mock output by letting execution proceed
     }
   }
 
@@ -400,7 +401,8 @@ Rate it as an integer from 0 (completely unrelated) to 100 (exactly followed eve
       });
 
     } catch (err: any) {
-      console.warn("Gemini playground notice: API currently busy or unavailable. Activating secure multi-model playground fallback engine.");
+      console.log("Gemini playground execution unavailable or rate-limited. Activating playground fallback.");
+      // Fall through to mock output by letting execution proceed
     }
   }
 
@@ -598,6 +600,7 @@ interface StoredReport {
   format: string;
   createdAt: string;
   data: any;
+  aiSummary?: string;
 }
 
 interface StoredTemplate {
@@ -837,7 +840,7 @@ app.get("/api/reports", (req, res) => {
   res.json({ success: true, reports: sandboxReports });
 });
 
-app.post("/api/reports/generate", (req, res) => {
+app.post("/api/reports/generate", async (req, res) => {
   const { title, reportType, format } = req.body;
   if (!title || !reportType || !format) {
     return res.status(400).json({ error: "Title, reportType, and format are required parameters." });
@@ -867,13 +870,27 @@ app.post("/api/reports/generate", (req, res) => {
     };
   }
 
+  let aiSummary = "";
+  if (ai) {
+    try {
+      const summaryResponse = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: `Write an executive summary analysis findings paragraph (maximum 3 sentences, started with a lightbulb icon 💡) for a prompt engineering report titled "${title}" of type "${reportType}". Be professional, concise, and technical.`
+      });
+      aiSummary = summaryResponse.text?.trim() || "";
+    } catch (err) {
+      console.log("AI summary generation for report unavailable or rate-limited.");
+    }
+  }
+
   const newReport: StoredReport = {
     id: `rep-${Date.now()}`,
     title,
     reportType,
     format,
     createdAt: new Date().toISOString(),
-    data: aggregatedData
+    data: aggregatedData,
+    aiSummary: aiSummary || undefined
   };
 
   sandboxReports.unshift(newReport);

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { safeJson } from "../utils";
 import { 
   Users, 
   UserPlus, 
@@ -58,7 +59,7 @@ export const OrganizationPage: React.FC = () => {
   const fetchOrgData = async () => {
     try {
       const res = await fetch("/api/organization");
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.success) {
         setOrg(data.organization);
         setMembers(data.members);
@@ -90,7 +91,7 @@ export const OrganizationPage: React.FC = () => {
           role: inviteRole
         })
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.success) {
         setMembers(prev => [...prev, data.member]);
         setSuccessMsg(`Invitation successfully compiled and dispatched to ${inviteEmail}`);

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { safeJson } from "../utils";
 import { motion } from "motion/react";
 import { 
   Bell, 
@@ -49,8 +50,8 @@ export const NotificationCenter: React.FC = () => {
         fetch("/api/notifications"),
         fetch("/api/activities")
       ]);
-      const notifData = await notifRes.json();
-      const actData = await actRes.json();
+      const notifData = await safeJson(notifRes);
+      const actData = await safeJson(actRes);
       if (notifData.success) setNotifications(notifData.notifications);
       if (actData.success) setActivities(actData.activities);
     } catch (e) {

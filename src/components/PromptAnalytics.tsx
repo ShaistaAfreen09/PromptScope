@@ -25,6 +25,7 @@ import {
   Cell 
 } from "recharts";
 import { PromptAnalysis } from "../types";
+import { safeJson } from "../utils";
 
 export const PromptAnalytics: React.FC = () => {
   const gridColor = "#E1EAE4";
@@ -60,12 +61,12 @@ export const PromptAnalytics: React.FC = () => {
         })
       });
 
-      const data = await res.json();
-      if (!res.ok) {
+      const data = await safeJson(res);
+      if (!res.ok || !data.success) {
         throw new Error(data.error || "Evaluation failed.");
       }
 
-      setResult(data);
+      setResult(data.data);
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Quality parser fallback triggered.");

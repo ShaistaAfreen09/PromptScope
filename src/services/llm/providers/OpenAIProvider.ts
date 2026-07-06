@@ -65,48 +65,8 @@ export class OpenAIProvider extends BaseProvider {
         evaluation: this.runEvaluation(options.promptText, data.responseText)
       };
     } catch (err: any) {
-      console.warn("OpenAIProvider falling back to high-fidelity local simulation", err);
-      // High fidelity simulation representing OpenAI GPT personality
-      const latencyMs = Math.round(350 + Math.random() * 450);
-      const promptTokens = this.estimateTokens(options.promptText);
-      
-      const responseText = `### 🌟 Executive Assessment Summary (GPT-4o Style)
-      
-Thank you for your prompt regarding: **"${options.promptText.substring(0, 45)}..."**
-
-As a highly capable generative model, here is a dual-tier pragmatic execution matrix tailored to your instructions:
-
-**1. Primary Solution Vectors**
-*   **Decoupled Integration**: Employs stateless async hooks to isolate service endpoints.
-*   **State Coordination**: Implements distributed in-memory caching to guarantee high consistency levels.
-*   **Identity Assertions**: Enforces strict payload screening at the edge to mitigate downstream errors.
-
-**2. Practical Execution Path**
-*   *Step A (Validation)*: Scrub incoming text parameters to avoid memory block collisions.
-*   *Step B (Processing)*: Deploy micro-service pipelines in parallel configurations.
-*   *Step C (Rendering)*: output visual results optimized for fluid, responsive mobile frameworks.
-
-*Conclusion*: This systematic methodology delivers a certified 28% increase in operational throughput and reduces response ambiguity metrics. Ready for staging deployment!`;
-
-      const completionTokens = this.estimateTokens(responseText);
-      const cost = this.calculateCost(promptTokens, completionTokens);
-
-      return {
-        modelId: options.modelId,
-        modelName: `${this.modelName} (Simulated)`,
-        provider: this.providerName,
-        responseText,
-        latencyMs,
-        tokenUsage: {
-          prompt: promptTokens,
-          completion: completionTokens,
-          total: promptTokens + completionTokens
-        },
-        costAnalysis: cost,
-        readabilityGrade: this.getReadabilityGrade(responseText),
-        confidenceScore: 96,
-        evaluation: this.runEvaluation(options.promptText, responseText)
-      };
+      console.log("OpenAIProvider execution notice:", err.message || err);
+      throw err;
     }
   }
 }

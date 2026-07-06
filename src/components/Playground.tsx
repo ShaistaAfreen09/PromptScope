@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useAuth, OperationType, handleFirestoreError } from "../contexts/AuthContext";
 import { PromptExecution, AIModel, ModelResponse, EvaluationResult } from "../types";
+import { safeJson } from "../utils";
 import { AVAILABLE_MODELS, ModelFactory } from "../services/llm/ModelFactory";
 import { PromptExecutor } from "../services/llm/PromptExecutor";
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, where, orderBy } from "firebase/firestore";
@@ -234,7 +235,7 @@ export const Playground: React.FC = () => {
         throw new Error("Optimization failed status " + res.status);
       }
 
-      const results = await res.json();
+      const results = await safeJson(res);
       if (results.success) {
         setOptimizedData(results.data);
       } else {

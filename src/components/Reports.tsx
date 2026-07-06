@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { safeJson } from "../utils";
 import { 
   FileText, 
   Download, 
@@ -21,6 +22,7 @@ interface GeneratedReport {
   format: string;
   createdAt: string;
   data: any;
+  aiSummary?: string;
 }
 
 export const Reports: React.FC = () => {
@@ -42,7 +44,7 @@ export const Reports: React.FC = () => {
   const fetchReports = async () => {
     try {
       const res = await fetch("/api/reports");
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.success) {
         setReports(data.reports);
       }
@@ -69,7 +71,7 @@ export const Reports: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, reportType, format })
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.success) {
         setReports(prev => [data.report, ...prev]);
         setSuccessMsg(`Compiled report "${title}" generated!`);
@@ -326,10 +328,10 @@ export const Reports: React.FC = () => {
                       </div>
                     </div>
                     <p className="text-[10px] text-[#2F3A33]/65 leading-relaxed bg-amber-50/20 border border-amber-500/10 p-3 rounded-lg mt-3">
-                      💡 Analysis Findings: The workspace prompts exhibit exceptional structural clarity, but minor context gaps remain when defining targeted variable schemas. Ensure developer templates specify JSON output formats explicitly to bypass pipeline failures.
+                      {selectedPdfReport.aiSummary || "💡 Analysis Findings: The workspace prompts exhibit exceptional structural clarity, but minor context gaps remain when defining targeted variable schemas. Ensure developer templates specify JSON output formats explicitly to bypass pipeline failures."}
                     </p>
                   </div>
-                ) : (
+                ) : Array.isArray(selectedPdfReport.data) ? (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-[11px]">
                       <thead>
@@ -341,26 +343,27 @@ export const Reports: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        <tr className="border-b border-slate-100">
-                          <td className="py-2.5 font-bold">Gemini 3.5 Flash</td>
-                          <td className="py-2.5">142ms</td>
-                          <td className="py-2.5 font-mono text-[#8FAF9B]">$0.075</td>
-                          <td className="py-2.5 text-right font-mono font-bold">94.6%</td>
-                        </tr>
-                        <tr className="border-b border-slate-100">
-                          <td className="py-2.5 font-bold">Gemini 3.5 Pro</td>
-                          <td className="py-2.5">382ms</td>
-                          <td className="py-2.5 font-mono text-[#8FAF9B]">$1.250</td>
-                          <td className="py-2.5 text-right font-mono font-bold">99.1%</td>
-                        </tr>
-                        <tr className="border-b border-slate-100">
-                          <td className="py-2.5 font-bold">GPT-4o</td>
-                          <td className="py-2.5">245ms</td>
-                          <td className="py-2.5 font-mono text-[#8FAF9B]">$5.000</td>
-                          <td className="py-2.5 text-right font-mono font-bold">96.4%</td>
-                        </tr>
+                        {selectedPdfReport.data.map((row: any, idx: number) => (
+                          <tr key={idx} className="border-b border-slate-100">
+                            <td className="py-2.5 font-bold">{row.model}</td>
+                            <td className="py-2.5">{row.avgLatencyMs}ms</td>
+                            <td className="py-2.5 font-mono text-[#8FAF9B]">{row.costPerMillion}</td>
+                            <td className="py-2.5 text-right font-mono font-bold">{row.alignmentScore}</td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {Object.entries(selectedPdfReport.data || {}).map(([key, val]: any, idx: number) => (
+                      <div key={idx} className="flex justify-between py-2 border-b border-slate-100">
+                        <span className="font-bold capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+                        <span className="font-mono text-right">
+                          {typeof val === 'object' ? JSON.stringify(val) : String(val)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

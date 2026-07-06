@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Sparkles, Zap, Check, Copy, RefreshCw } from "lucide-react";
 import { PromptOptimization } from "../types";
+import { safeJson } from "../utils";
 
 export const PromptOptimizer: React.FC = () => {
   const [promptText, setPromptText] = useState("write code for a login page in python or something.");
@@ -32,7 +33,7 @@ export const PromptOptimizer: React.FC = () => {
         })
       });
 
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) {
         throw new Error(data.error || "Optimization route failure.");
       }

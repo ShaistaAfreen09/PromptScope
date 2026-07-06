@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { safeJson } from "../utils";
 import { 
   Key, 
   ShieldCheck, 
@@ -38,7 +39,7 @@ export const ApiKeysPage: React.FC = () => {
   const fetchKeys = async () => {
     try {
       const res = await fetch("/api/keys");
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.success) {
         setKeys(data.keys);
       }
@@ -67,7 +68,7 @@ export const ApiKeysPage: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider, rawKey })
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (res.ok && data.success) {
         setKeys(prev => [data.key, ...prev]);
         setRawKey("");
@@ -90,7 +91,7 @@ export const ApiKeysPage: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id })
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.success) {
         setKeys(prev => prev.map(k => k.id === id ? { ...k, isActive: true, lastValidatedAt: data.lastValidated } : k));
         // Show success alert in UI
