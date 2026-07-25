@@ -10,6 +10,7 @@ import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import { resolveGeminiModelName } from "./geminiConfig";
 
 // Load environment variables
 dotenv.config();
@@ -19,6 +20,22 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
+
+function logGeminiError(context: string, err: unknown) {
+  console.error("Gemini API Error:", err);
+  if (err instanceof Error) {
+    console.error(err.message);
+  }
+
+  if (typeof err === "object" && err !== null) {
+    const details = err as Record<string, unknown>;
+    for (const key of ["status", "code", "details", "response", "cause"]) {
+      if (key in details) {
+        console.error(`${context} ${key}:`, details[key]);
+      }
+    }
+  }
+}
 
 // Middleware
 app.use(express.json());
@@ -73,6 +90,13 @@ app.post("/api/analyze-prompt", async (req, res) => {
   // Latency timer
   const startTime = Date.now();
 
+  const geminiModelResolution = resolveGeminiModelName(process.env.GEMINI_MODEL_NAME);
+  if (!geminiModelResolution.isSupported) {
+    return res.status(400).json({ success: false, error: geminiModelResolution.error });
+  }
+
+  const geminiModelName = geminiModelResolution.modelName;
+
   if (ai) {
     try {
       const systemContext = `You are PromptScope AI, an elite prompt engineer. Analyze the provided prompt and return a structured JSON assessment of its attributes.
@@ -85,8 +109,9 @@ Evaluate 4 metrics from 0 to 100:
 Provide an overall weighted score also from 0 to 100.
 Identify detailed suggestions for improvements. Include an estimated token count.`;
 
+      console.log("Executing Gemini request using model:", geminiModelName);
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: geminiModelName,
         contents: `Analyze the following prompt and system context:
 System Instruction: ${systemInstruction || "None"}
 Prompt Text: "${promptText}"`,
@@ -169,8 +194,8 @@ Prompt Text: "${promptText}"`,
         }
       });
 
-    } catch (err: any) {
-      console.log("Gemini live analysis unavailable or rate-limited. Activating local analysis fallback.");
+    } catch (err: unknown) {
+      logGeminiError("Gemini live analysis error:", err);
       // Fall through to mock output by letting execution proceed
     }
   }
@@ -204,6 +229,13 @@ app.post("/api/optimize-prompt", async (req, res) => {
 
   const startTime = Date.now();
 
+  const geminiModelResolution = resolveGeminiModelName(process.env.GEMINI_MODEL_NAME);
+  if (!geminiModelResolution.isSupported) {
+    return res.status(400).json({ success: false, error: geminiModelResolution.error });
+  }
+
+  const geminiModelName = geminiModelResolution.modelName;
+
   if (ai) {
     try {
       const systemContext = `You are PromptScope Optimizer, the world's finest prompt tuner.
@@ -220,8 +252,9 @@ You must return JSON containing:
 4. specificityChange: An estimated percentage improve (e.g. 25 for +25%)
 5. overallChange: An overall quality score improvement (e.g. 20 for +20%)`;
 
+      console.log("Executing Gemini request using model:", geminiModelName);
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: geminiModelName,
         contents: `Original Prompt: "${promptText}"
 Original System Instruction: "${systemInstruction || "None"}"
 Optimization Target Goal: "${targetGoal || "General quality, clear phrasing, and rich constraints"}"`,
@@ -260,8 +293,8 @@ Optimization Target Goal: "${targetGoal || "General quality, clear phrasing, and
         }
       });
 
-    } catch (err: any) {
-      console.log("Gemini optimization unavailable or rate-limited. Activating local optimization fallback.");
+    } catch (err: unknown) {
+      logGeminiError("Gemini optimization error:", err);
       // Fall through to mock output by letting execution proceed
     }
   }
@@ -314,6 +347,13 @@ app.post("/api/execute-llm", async (req, res) => {
 
   const startTime = Date.now();
 
+  const geminiModelResolution = resolveGeminiModelName(process.env.GEMINI_MODEL_NAME);
+  if (!geminiModelResolution.isSupported) {
+    return res.status(400).json({ success: false, error: geminiModelResolution.error });
+  }
+
+  const geminiModelName = geminiModelResolution.modelName;
+
   // Model Metadata Calculations
   let Pricing = { inputPerMillion: 0.075, outputPerMillion: 0.3 };
   let chosenModelName = "Gemini 3.5 Flash";
@@ -343,8 +383,9 @@ app.post("/api/execute-llm", async (req, res) => {
       
       [System Meta Instruction]: ${stylingPrompt}`;
 
+      console.log("Executing Gemini request using model:", geminiModelName);
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: geminiModelName,
         contents: promptText,
         config: {
           systemInstruction: mergedSystemInstruction,
@@ -368,8 +409,9 @@ app.post("/api/execute-llm", async (req, res) => {
       const estimatedCostUsd = parseFloat((costInput + costOutput).toFixed(6));
 
       // Alignment computation (Gemini rates its alignment with initial instructions)
+      console.log("Executing Gemini request using model:", geminiModelName);
       const alignmentCheck = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: geminiModelName,
         contents: `Rate the alignment of the Response relative to the Prompt instruction:
 Prompt: "${promptText}"
 Response: "${responseText}"
@@ -400,8 +442,8 @@ Rate it as an integer from 0 (completely unrelated) to 100 (exactly followed eve
         }
       });
 
-    } catch (err: any) {
-      console.log("Gemini playground execution unavailable or rate-limited. Activating playground fallback.");
+    } catch (err: unknown) {
+      logGeminiError("Gemini playground execution error:", err);
       // Fall through to mock output by letting execution proceed
     }
   }
@@ -872,14 +914,20 @@ app.post("/api/reports/generate", async (req, res) => {
 
   let aiSummary = "";
   if (ai) {
-    try {
-      const summaryResponse = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: `Write an executive summary analysis findings paragraph (maximum 3 sentences, started with a lightbulb icon 💡) for a prompt engineering report titled "${title}" of type "${reportType}". Be professional, concise, and technical.`
-      });
-      aiSummary = summaryResponse.text?.trim() || "";
-    } catch (err) {
-      console.log("AI summary generation for report unavailable or rate-limited.");
+    const geminiModelResolution = resolveGeminiModelName(process.env.GEMINI_MODEL_NAME);
+    if (geminiModelResolution.isSupported) {
+      try {
+        console.log("Executing Gemini request using model:", geminiModelResolution.modelName);
+        const summaryResponse = await ai.models.generateContent({
+          model: geminiModelResolution.modelName,
+          contents: `Write an executive summary analysis findings paragraph (maximum 3 sentences, started with a lightbulb icon 💡) for a prompt engineering report titled "${title}" of type "${reportType}". Be professional, concise, and technical.`
+        });
+        aiSummary = summaryResponse.text?.trim() || "";
+      } catch (err: unknown) {
+        logGeminiError("Gemini report summary error:", err);
+      }
+    } else {
+      console.error(geminiModelResolution.error);
     }
   }
 
