@@ -498,7 +498,7 @@ const isHealthy = await provider.healthCheck();
         finishReason: response.finishReason,
         confidenceScore: response.confidence
       }
-    };
+    });
 
       
 
