@@ -155,53 +155,154 @@ ${promptText}`,
       };
     }
 
-    const tokens = parsed.estimatedTokenCount || gemini.countTokens(promptText);
-    const costEstimate = gemini.estimateCost(tokens, gemini.countTokens(cleanJsonStr), "gemini-3.6-flash");
+   const geminiModelResolution = resolveGeminiModelName(process.env.GEMINI_MODEL_NAME);
+if (!geminiModelResolution.isSupported) {
+  return res.status(400).json({
+    success: false,
+    error: geminiModelResolution.error,
+  });
+}
 
-    return res.json({
-      success: true,
-      data: {
-        promptText,
-        timestamp: new Date().toISOString(),
-        scores: {
-          score: parsed.score || 75,
-          clarity: parsed.clarity || { score: 75, feedback: "Standard structure." },
-          specificity: parsed.specificity || { score: 75, feedback: "Constraints are moderate." },
-          context: parsed.context || { score: 75, feedback: "Adequate background information." },
-          ambiguity: parsed.ambiguity || { score: 75, feedback: "Minimal ambiguity." }
-        },
-        tokenCount: tokens,
-        estimatedCost: costEstimate.totalCostUsd,
-        suggestions: parsed.suggestions || ["Specify response formatting."],
-        latencyMs
-      }
-    });
-  } catch (err: any) {
-    console.error("Prompt Analysis Error:", err);
-    return res.status(500).json({
-      success: false,
-      error: err.message || "Failed to analyze prompt with Gemini provider."
-    });
+const geminiModelName = geminiModelResolution.modelName;
+
+if (!gemini || !(await gemini.healthCheck())) {
+  return res.status(503).json({
+    success: false,
+    error: "Google Gemini provider is disabled or missing API key.",
+  });
+}
+
+try {
+  const systemContext = `You are PromptScope AI, an elite prompt engineer.
+
+Analyze the provided prompt.
+
+Evaluate:
+1. Clarity
+2. Specificity
+3. Context
+4. Ambiguity
+
+Return ONLY valid JSON:
+
+{
+  "score":85,
+  "clarity":{"score":85,"feedback":"..."},
+  "specificity":{"score":80,"feedback":"..."},
+  "context":{"score":90,"feedback":"..."},
+  "ambiguity":{"score":88,"feedback":"..."},
+  "suggestions":["Suggestion 1","Suggestion 2"],
+  "estimatedTokenCount":42
+}`;
+
+  const response = await gemini.generate({
+    modelId: geminiModelName,
+    promptText: `Analyze the following prompt:
+
+System Instruction:
+${systemInstruction || "None"}
+
+Prompt Text:
+${promptText}`,
+    systemInstruction: systemContext,
+    temperature: 0.2,
+  });
+
+  const latencyMs = Date.now() - startTime;
+
+  const cleanJsonStr = response.response
+    .replace(/```json/g, "")
+    .replace(/```/g, "")
+    .trim();
+
+  let parsed: any;
+
+  try {
+    parsed = JSON.parse(cleanJsonStr);
+  } catch {
+    parsed = {
+      score: response.alignment || 80,
+      clarity: {
+        score: 80,
+        feedback: "Clear functional directives.",
+      },
+      specificity: {
+        score: 75,
+        feedback: "Contains reasonable detail.",
+      },
+      context: {
+        score: 85,
+        feedback: "Good contextual grounding.",
+      },
+      ambiguity: {
+        score: 80,
+        feedback: "Low ambiguity detected.",
+      },
+      suggestions: [
+        "Define target output schema explicitly.",
+      ],
+      estimatedTokenCount: gemini.countTokens(promptText),
+    };
   }
-});
 
+  const tokens =
+    parsed.estimatedTokenCount ||
+    gemini.countTokens(promptText);
 
-// 2. Prompt Optimizer Endpoint
-app.post("/api/optimize-prompt", async (req, res) => {
-  const { promptText, systemInstruction, targetGoal } = req.body;
+  const costEstimate = gemini.estimateCost(
+    tokens,
+    gemini.countTokens(cleanJsonStr),
+    geminiModelName
+  );
 
-  if (!promptText || promptText.trim() === "") {
-    return res.status(400).json({ success: false, error: "Prompt text is required." });
-  }
+  return res.json({
+    success: true,
+    data: {
+      promptText,
+      timestamp: new Date().toISOString(),
+      scores: {
+        score: parsed.score || 75,
+        clarity:
+          parsed.clarity || {
+            score: 75,
+            feedback: "Standard structure.",
+          },
+        specificity:
+          parsed.specificity || {
+            score: 75,
+            feedback: "Constraints are moderate.",
+          },
+        context:
+          parsed.context || {
+            score: 75,
+            feedback:
+              "Adequate background information.",
+          },
+        ambiguity:
+          parsed.ambiguity || {
+            score: 75,
+            feedback: "Minimal ambiguity.",
+          },
+      },
+      tokenCount: tokens,
+      estimatedCost: costEstimate.totalCostUsd,
+      suggestions:
+        parsed.suggestions || [
+          "Specify response formatting.",
+        ],
+      latencyMs,
+    },
+  });
+} catch (err: any) {
+  console.error("Prompt Analysis Error:", err);
 
-  const startTime = Date.now();
-  const gemini = globalProviderRegistry.getProviderByName("Google");
-
-  const geminiModelResolution = resolveGeminiModelName(process.env.GEMINI_MODEL_NAME);
-  if (!geminiModelResolution.isSupported) {
-    return res.status(400).json({ success: false, error: geminiModelResolution.error });
-  }
-
+  return res.status(500).json({
+    success: false,
+    error:
+      err.message ||
+      "Failed to analyze prompt with Gemini provider.",
+  });
+}
   const geminiModelName = geminiModelResolution.modelName;
 
   if (ai) {
