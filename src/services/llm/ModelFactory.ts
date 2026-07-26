@@ -6,8 +6,8 @@ import { ClaudeProvider } from "./providers/ClaudeProvider";
 
 export const AVAILABLE_MODELS: AIModel[] = [
   {
-    id: "gemini-3.5-flash",
-    name: "Gemini 3.5 Flash",
+    id: "gemini-3.6-flash",
+    name: "Gemini 3.6 Flash",
     provider: "Google",
     capability: "Superfast generation, high precision, large context window",
     contextWindow: "1,000,000 tokens",
@@ -56,7 +56,7 @@ export class ModelFactory {
     const model = this.getModelById(modelId);
     if (!model) {
       // Fallback
-      return new GeminiProvider("gemini-3.5-flash");
+      return new GeminiProvider("gemini-3.6-flash");
     }
 
     switch (model.provider) {
@@ -67,7 +67,7 @@ export class ModelFactory {
       case "Anthropic":
         return new ClaudeProvider(modelId);
       default:
-        return new GeminiProvider("gemini-3.5-flash");
+        return new GeminiProvider("gemini-3.6-flash");
     }
   }
 }

@@ -50,8 +50,7 @@ export const Playground: React.FC = () => {
 
   // Model Selection State
   const [selectedModels, setSelectedModels] = useState<string[]>([
-    "gemini-3.5-flash",
-    "gemini-3.5-pro",
+    "gemini-3.6-flash",
     "gpt-4o"
   ]);
 
@@ -189,25 +188,7 @@ export const Playground: React.FC = () => {
       }
     } catch (e: any) {
       console.error(e);
-      // Local Heuristics Mock-up analysis fallback
-      const mockResult = {
-        scores: {
-          score: 72,
-          clarity: { score: 75, feedback: "Prompt goals are understandable but can use cleaner structural layouts." },
-          specificity: { score: 68, feedback: "Constraints are light; indicate exactly what format is requested." },
-          context: { score: 80, feedback: "System role matches security profiles perfectly." },
-          ambiguity: { score: 65, feedback: "Uses generic phrasing. Restrict vague boundaries." }
-        },
-        tokenCount: Math.ceil(prompt.length / 4.1),
-        estimatedCost: 0.00004,
-        suggestions: [
-          "Format instructions explicitly (e.g. 'provide output inside a markdown code fence').",
-          "Establish negative constraints: describe what target details should be avoided.",
-          "Partition long lines into clean atomic stages or nested loops."
-        ],
-        latencyMs: 120
-      };
-      setAnalysisReport(mockResult);
+      setErrorMessage(`Prompt Analysis Error: ${e.message || String(e)}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -243,28 +224,8 @@ export const Playground: React.FC = () => {
       }
     } catch (e: any) {
       console.error(e);
-      // Local Mock optimized fallback
-      setOptimizedData({
-        optimizedPrompt: `You are a professional security architect.
-
-### Context & Background
-The client requires an architectural breakdown.
-${prompt}
-
-### Strict Execution Constraints
-1. Present instructions inside clear Markdown headers.
-2. Outline exactly why this container setup isolates boundaries.
-3. Keep all text objective and drop wordy intro greetings.`,
-        explanation: `### Key Improvements
-1. **Established Clear Hierarchy**: Structured context, instructions, and constraints into markdown segments.
-2. **Eliminated Preamble**: Instructed the generator to start directly with the analytical layout.
-3. **Role Validation**: Reinforces security boundaries naturally.`,
-        metricShifts: {
-          clarityChange: 18,
-          specificityChange: 22,
-          overallChange: 20
-        }
-      });
+      setErrorMessage(`Prompt Optimization Error: ${e.message || String(e)}`);
+      setShowOptimizationModal(false);
     } finally {
       setIsOptimizing(false);
     }
@@ -388,48 +349,6 @@ ${prompt}
       if (localHistoryJson) {
         historyRecords = JSON.parse(localHistoryJson);
       }
-    }
-
-    // seed some mock historic records if entirely empty
-    if (historyRecords.length === 0) {
-      historyRecords = [
-        {
-          id: "hist_1",
-          userId: user?.uid || "anonymous_user",
-          promptText: "Explain quantum computing quantum coherence principles using water waves metaphors.",
-          systemInstruction: "Format as an editorial narrative column.",
-          category: "Education",
-          timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
-          modelsUsed: ["gemini-3.5-flash", "gpt-4o"],
-          responses: [
-            {
-              modelId: "gemini-3.5-flash",
-              modelName: "Gemini 3.5 Flash",
-              provider: "Google",
-              responseText: "Think of quantum coherence like children executing perfectly synchronous jumps on a trampoline. They create clean, constructive waves of energy because their rhythms match exactly.",
-              latencyMs: 140,
-              tokenUsage: { prompt: 18, completion: 35, total: 53 },
-              costAnalysis: { inputCostUsd: 0.000001, outputCostUsd: 0.00001, totalCostUsd: 0.000011 },
-              readabilityGrade: "Intermediate (Grade 7-9)",
-              confidenceScore: 92,
-              evaluation: {
-                relevanceScore: 94,
-                completenessScore: 88,
-                clarityScore: 95,
-                creativityScore: 90,
-                structureScore: 92,
-                overallScore: 92,
-                summary: "Exquisite educational synthesis. High metaphorical alignment."
-              }
-            }
-          ],
-          averageLatencyMs: 140,
-          totalTokens: 53,
-          totalCostUsd: 0.000011,
-          isFavorite: true
-        }
-      ];
-      localStorage.setItem("promptscope_executions_history", JSON.stringify(historyRecords));
     }
 
     setHistory(historyRecords);

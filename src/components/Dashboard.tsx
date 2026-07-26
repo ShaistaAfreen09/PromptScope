@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import {
   Activity,
@@ -22,6 +22,9 @@ import {
   Pie,
   Cell
 } from "recharts";
+import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
+import { db } from "../firebase/firebase";
+import { PromptExecution } from "../types";
 
 interface DashboardProps {
   onNavigate: (tab: string) => void;
@@ -34,51 +37,157 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, userName }) =>
   const tooltipBg = "#FAF8F3";
   const tooltipBorder = "rgba(143, 175, 155, 0.25)";
 
-  // Analytical Dataset
-  const trendData = [
-    { day: "Mon", score: 62, cost: 0.12, tokens: 2400 },
-    { day: "Tue", score: 65, cost: 0.15, tokens: 3100 },
-    { day: "Wed", score: 71, cost: 0.08, tokens: 1900 },
-    { day: "Thu", score: 78, cost: 0.19, tokens: 4200 },
-    { day: "Fri", score: 84, cost: 0.11, tokens: 2800 },
-    { day: "Sat", score: 86, cost: 0.05, tokens: 1200 },
-    { day: "Sun", score: 91, cost: 0.04, tokens: 950 }
-  ];
+  const [executions, setExecutions] = useState<PromptExecution[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const modelData = [
-    { name: "Gemini 3.5 Flash", effectiveness: 94, share: 60 },
-    { name: "Gemini 3.5 Pro", effectiveness: 98, share: 25 },
-    { name: "Open-Source Llama3", effectiveness: 81, share: 15 }
-  ];
-
-  const COLORS = ["#8FAF9B", "#D8B56A", "#2F3A33"];
-
-  const recentActivities = [
-    {
-      id: 1,
-      type: "optimization",
-      title: "Optimized SqlQueryBuilder template",
-      time: "12 mins ago",
-      impact: "+48% Clarity Score",
-      description: "Standardized subquery extraction and query parameter controls for PostgreSQL dialect."
-    },
-    {
-      id: 2,
-      type: "analysis",
-      title: "Evaluated MedicalResumeSummarizer",
-      time: "2 hours ago",
-      impact: "92% Score (High Quality)",
-      description: "Identified low specificity in medical jargon categorization and suggested tabular constraints."
-    },
-    {
-      id: 3,
-      type: "comparison",
-      title: "Compared Gemini-v2 vs Anthropic-v3",
-      time: "1 day ago",
-      impact: "-34% Cost Savings",
-      description: "Side-by-side prompt output latency analysis confirmed 120ms improvement."
+  useEffect(() => {
+    let unsubscribe = () => {};
+    try {
+      const q = query(collection(db, "executions"));
+      unsubscribe = onSnapshot(q, (snapshot) => {
+        const docs: PromptExecution[] = [];
+        snapshot.forEach((docSnap) => {
+          docs.push({ ...docSnap.data() as PromptExecution, id: docSnap.id });
+        });
+        docs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setExecutions(docs);
+        setLoading(false);
+      }, (err) => {
+        console.warn("Firestore snapshot listener notice, checking local storage:", err);
+        const local = localStorage.getItem("promptscope_executions_history");
+        if (local) {
+          try {
+            setExecutions(JSON.parse(local));
+          } catch {}
+        }
+        setLoading(false);
+      });
+    } catch (e) {
+      console.warn("Firestore collection access fallback:", e);
+      const local = localStorage.getItem("promptscope_executions_history");
+      if (local) {
+        try {
+          setExecutions(JSON.parse(local));
+        } catch {}
+      }
+      setLoading(false);
     }
-  ];
+
+    return () => unsubscribe();
+  }, []);
+
+  // Compute metrics from real execution history
+  const totalAnalyzed = executions.length;
+
+  // Average quality score across all executions
+  let totalScoreSum = 0;
+  let scoreCount = 0;
+  let totalTokens = 0;
+  let totalCost = 0;
+
+  const modelUsageMap: { [modelName: string]: { count: number; totalScore: number } } = {};
+
+  executions.forEach((exec) => {
+    totalCost += exec.totalCostUsd || 0;
+    exec.responses?.forEach((resp) => {
+      if (resp.evaluation?.overallScore) {
+        totalScoreSum += resp.evaluation.overallScore;
+        scoreCount++;
+      }
+      if (resp.tokenUsage?.total) {
+        totalTokens += resp.tokenUsage.total;
+      }
+
+      const mName = resp.modelName || resp.modelId;
+      if (!modelUsageMap[mName]) {
+        modelUsageMap[mName] = { count: 0, totalScore: 0 };
+      }
+      modelUsageMap[mName].count += 1;
+      modelUsageMap[mName].totalScore += (resp.evaluation?.overallScore || 85);
+    });
+  });
+
+  const avgQuality = scoreCount > 0 ? (totalScoreSum / scoreCount).toFixed(1) : "0.0";
+
+  // Build model share chart from real executions
+  const totalModelRuns = Object.values(modelUsageMap).reduce((acc, m) => acc + m.count, 0);
+  const modelData = Object.keys(modelUsageMap).length > 0
+    ? Object.entries(modelUsageMap).map(([name, stat]) => ({
+        name,
+        effectiveness: Math.round(stat.totalScore / stat.count),
+        share: totalModelRuns > 0 ? Math.round((stat.count / totalModelRuns) * 100) : 0
+      }))
+    : [
+        { name: "Gemini 3.6 Flash", effectiveness: 0, share: 100 }
+      ];
+
+  const COLORS = ["#8FAF9B", "#D8B56A", "#2F3A33", "#A58C6A", "#5B8C72"];
+
+  // Aggregate trend data by day or fallback to real timestamp groupings
+  const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayStats: { [day: string]: { scoreSum: number; count: number; cost: number; tokens: number } } = {
+    Mon: { scoreSum: 0, count: 0, cost: 0, tokens: 0 },
+    Tue: { scoreSum: 0, count: 0, cost: 0, tokens: 0 },
+    Wed: { scoreSum: 0, count: 0, cost: 0, tokens: 0 },
+    Thu: { scoreSum: 0, count: 0, cost: 0, tokens: 0 },
+    Fri: { scoreSum: 0, count: 0, cost: 0, tokens: 0 },
+    Sat: { scoreSum: 0, count: 0, cost: 0, tokens: 0 },
+    Sun: { scoreSum: 0, count: 0, cost: 0, tokens: 0 }
+  };
+
+  executions.forEach((exec) => {
+    const d = new Date(exec.timestamp);
+    const dayName = daysOfWeek[d.getDay()] || "Mon";
+    const resp = exec.responses?.[0];
+    const score = resp?.evaluation?.overallScore || 85;
+    const tokens = resp?.tokenUsage?.total || 500;
+    dayStats[dayName].scoreSum += score;
+    dayStats[dayName].count += 1;
+    dayStats[dayName].cost += exec.totalCostUsd || 0;
+    dayStats[dayName].tokens += tokens;
+  });
+
+  const orderedDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const trendData = orderedDays.map((day) => {
+    const st = dayStats[day];
+    return {
+      day,
+      score: st.count > 0 ? Math.round(st.scoreSum / st.count) : 0,
+      cost: Number(st.cost.toFixed(4)),
+      tokens: st.tokens
+    };
+  });
+
+  // Recent activities mapped from real executions
+  const recentActivities = executions.slice(0, 4).map((exec, idx) => {
+    const resp = exec.responses?.[0];
+    const score = resp?.evaluation?.overallScore || 85;
+    const modelName = resp?.modelName || "Gemini 3.6 Flash";
+    const timeAgo = getTimeAgo(exec.timestamp);
+
+    return {
+      id: exec.id || idx,
+      type: exec.selectedModels?.length > 1 ? "comparison" : "execution",
+      title: `Executed: ${exec.promptText.slice(0, 36)}...`,
+      time: timeAgo,
+      impact: `${score}% Quality Score (${modelName})`,
+      description: exec.systemInstruction
+        ? `System Directive: "${exec.systemInstruction.slice(0, 60)}..."`
+        : `Execution recorded across ${exec.selectedModels?.length || 1} model engine(s).`
+    };
+  });
+
+  function getTimeAgo(timestampStr: string): string {
+    if (!timestampStr) return "recently";
+    const diffMs = Date.now() - new Date(timestampStr).getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins} mins ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays} days ago`;
+  }
 
   return (
     <div className="space-y-8 animate-fade-in text-forest">
@@ -119,9 +228,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, userName }) =>
             </div>
           </div>
           <div className="mt-4">
-            <h3 className="text-2xl font-bold text-forest">1,482</h3>
+            <h3 className="text-2xl font-bold text-forest">{totalAnalyzed.toLocaleString()}</h3>
             <span className="text-[10px] font-medium text-green-700 bg-green-500/5 px-2 py-0.5 rounded border border-green-500/10 mt-1 inline-block">
-              +12.4% MoM
+              {executions.length > 0 ? "Live runs" : "Ready"}
             </span>
           </div>
         </div>
@@ -134,54 +243,54 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, userName }) =>
             </div>
           </div>
           <div className="mt-4">
-            <h3 className="text-2xl font-bold text-forest">84.2%</h3>
+            <h3 className="text-2xl font-bold text-forest">{avgQuality}%</h3>
             <span className="text-[10px] font-medium text-green-700 bg-green-500/5 px-2 py-0.5 rounded border border-green-500/10 mt-1 inline-block">
-              +4.8% growth
+              Evaluated Index
             </span>
           </div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-sage/15 shadow-sm col-span-1 sm:col-span-1 lg:col-span-1 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-forest/55 uppercase tracking-wider">Optimized Shift</span>
+            <span className="text-[10px] font-bold text-forest/55 uppercase tracking-wider">Models Active</span>
             <div className="w-7 h-7 rounded-lg bg-sage/10 flex items-center justify-center text-sage">
               <Zap className="w-4 h-4 text-sand" />
             </div>
           </div>
           <div className="mt-4">
-            <h3 className="text-2xl font-bold text-forest">+142%</h3>
+            <h3 className="text-2xl font-bold text-forest">{Object.keys(modelUsageMap).length || 1}</h3>
             <span className="text-[10px] font-medium text-green-700 bg-green-500/5 px-2 py-0.5 rounded border border-green-500/10 mt-1 inline-block">
-              Avg gain index
+              Connected Engines
             </span>
           </div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-sage/15 shadow-sm col-span-1 sm:col-span-1 lg:col-span-1 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-forest/55 uppercase tracking-wider">Token Cap</span>
+            <span className="text-[10px] font-bold text-forest/55 uppercase tracking-wider">Tokens Used</span>
             <div className="w-7 h-7 rounded-lg bg-sage/10 flex items-center justify-center text-sage">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-4">
-            <h3 className="text-2xl font-bold text-forest">3.4M</h3>
-            <span className="text-[10px] font-medium text-red-700 bg-red-500/5 px-2 py-0.5 rounded border border-red-500/10 mt-1 inline-block">
-              65% of limits
+            <h3 className="text-2xl font-bold text-forest">{totalTokens > 1000000 ? `${(totalTokens / 1000000).toFixed(1)}M` : totalTokens.toLocaleString()}</h3>
+            <span className="text-[10px] font-medium text-forest/70 bg-sage/10 px-2 py-0.5 rounded border border-sage/10 mt-1 inline-block">
+              Inference Volume
             </span>
           </div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-sage/15 shadow-sm col-span-1 sm:col-span-1 lg:col-span-2 flex flex-col justify-between space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-forest/55 uppercase tracking-wider">Cost Preserved</span>
+            <span className="text-[10px] font-bold text-forest/55 uppercase tracking-wider">Estimated API Cost</span>
             <div className="w-7 h-7 rounded-lg bg-sage/10 flex items-center justify-center text-sage">
               <DollarSign className="w-4 h-4 text-sand" />
             </div>
           </div>
           <div className="mt-4">
-            <h3 className="text-2xl font-bold text-forest">$1,248.50</h3>
+            <h3 className="text-2xl font-bold text-forest">${totalCost.toFixed(4)}</h3>
             <span className="text-[10px] font-medium text-green-700 bg-green-500/5 px-2 py-0.5 rounded border border-green-500/10 mt-1 inline-block">
-              Saved via smart compression
+              Recorded Telemetry Expense
             </span>
           </div>
         </div>

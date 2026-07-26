@@ -33,7 +33,7 @@ export const UserProfilePage: React.FC = () => {
   };
 
   const handleRandomAvatar = () => {
-    const randomSeed = Math.random().toString(36).substring(7);
+    const randomSeed = `user-${Date.now().toString(36)}`;
     setAvatarSeed(randomSeed);
   };
 

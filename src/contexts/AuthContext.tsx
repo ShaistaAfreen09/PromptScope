@@ -4,6 +4,7 @@ import {
   onAuthStateChanged,
   signOut,
   signInWithPopup,
+  signInAnonymously,
   updateProfile
 } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
@@ -77,6 +78,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
+  signInAsGuest: () => Promise<void>;
   logout: () => Promise<void>;
   updateUserProfile: (data: Partial<UserProfile>) => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -100,14 +102,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Create initial default profile
         const defaultProfile: UserProfile = {
           uid,
-          email: initialUser.email || "",
-          displayName: initialUser.displayName || "AI Practitioner",
+          email: initialUser.email || "practitioner@promptscope.io",
+          displayName: initialUser.displayName || (initialUser.isAnonymous ? "Guest Practitioner" : "AI Practitioner"),
           photoURL: initialUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${uid}`,
           organization: "PromptLabs SaaS",
           role: "Prompt Engineer",
           bio: "AI Researcher specialized in commercial prompting architectures and output evaluations.",
           preferences: {
-            defaultModel: "gemini-3.5-flash",
+            defaultModel: "gemini-3.6-flash",
             theme: "light",
             apiUsageLimit: 1000
           },
@@ -119,7 +121,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (writeErr?.code === "permission-denied" || writeErr?.message?.includes("permission") || writeErr?.message?.includes("Permission")) {
             handleFirestoreError(writeErr, OperationType.CREATE, `users/${uid}`);
           }
-          throw writeErr;
         }
         setProfile(defaultProfile);
       }
@@ -128,17 +129,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         handleFirestoreError(e, OperationType.GET, `users/${uid}`);
       }
       console.error("Error setting/getting user profile:", e);
-      // Fallback local memory profile in case Firestore permissions are still deploying or blocked
+      // Fallback local memory profile
       setProfile({
         uid,
-        email: initialUser.email || "",
-        displayName: initialUser.displayName || "AI Practitioner",
+        email: initialUser.email || "practitioner@promptscope.io",
+        displayName: initialUser.displayName || (initialUser.isAnonymous ? "Guest Practitioner" : "AI Practitioner"),
         photoURL: initialUser.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${uid}`,
         organization: "PromptLabs SaaS",
         role: "Prompt Engineer",
         bio: "AI Researcher specialized in commercial prompting architectures and output evaluations.",
         preferences: {
-          defaultModel: "gemini-3.5-flash",
+          defaultModel: "gemini-3.6-flash",
           theme: "light",
           apiUsageLimit: 1000
         },
@@ -176,15 +177,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const signInAsGuest = async () => {
+    setLoading(true);
+    try {
+      await signInAnonymously(auth);
+    } catch (e: any) {
+      console.warn("Anonymous auth failed or disabled, using local fallback state:", e);
+      // If anonymous auth is also disabled, create local fallback user profile
+      const localGuestUid = `guest-${Date.now()}`;
+      setProfile({
+        uid: localGuestUid,
+        email: "guest@promptscope.io",
+        displayName: "Guest Practitioner",
+        photoURL: `https://api.dicebear.com/7.x/bottts/svg?seed=${localGuestUid}`,
+        organization: "PromptScope Sandbox",
+        role: "Prompt Engineer",
+        bio: "Guest practitioner testing prompt benchmarks.",
+        preferences: {
+          defaultModel: "gemini-3.6-flash",
+          theme: "light",
+          apiUsageLimit: 5000
+        },
+        createdAt: new Date().toISOString()
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     setLoading(true);
     try {
       await signOut(auth);
-      setUser(null);
-      setProfile(null);
     } catch (e) {
       console.error("Sign out failure:", e);
     } finally {
+      setUser(null);
+      setProfile(null);
       setLoading(false);
     }
   };
@@ -218,6 +247,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profile,
         loading,
         signInWithGoogle,
+        signInAsGuest,
         logout,
         updateUserProfile,
         refreshProfile

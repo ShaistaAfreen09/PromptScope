@@ -61,7 +61,7 @@ export class OpenAIProvider extends BaseProvider {
         },
         costAnalysis: cost,
         readabilityGrade: data.readabilityGrade || this.getReadabilityGrade(data.responseText),
-        confidenceScore: data.alignmentScore || (85 + Math.floor(Math.random() * 12)),
+        confidenceScore: data.alignmentScore || 90,
         evaluation: this.runEvaluation(options.promptText, data.responseText)
       };
     } catch (err: any) {

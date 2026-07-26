@@ -65,7 +65,7 @@ export class PromptExecutor {
     );
 
     return {
-      id: "exec_" + Math.random().toString(36).substring(2, 11),
+      id: "exec_" + Date.now().toString(36) + "_" + Math.floor(performance.now()).toString(36),
       userId,
       promptText,
       systemInstruction: systemInstruction || "",

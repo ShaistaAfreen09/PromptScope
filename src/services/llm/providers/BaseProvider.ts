@@ -41,18 +41,23 @@ export abstract class BaseProvider {
   }
 
   protected runEvaluation(promptText: string, responseText: string): EvaluationResult {
-    const hasStructure = responseText.includes("###") || responseText.includes("- ") || responseText.includes("**");
+    const hasStructure = responseText.includes("###") || responseText.includes("- ") || responseText.includes("**") || responseText.includes("```");
     const len = responseText.length;
+    const words = responseText.split(/\s+/).filter(Boolean).length;
     
-    let relevance = 85 + Math.floor(Math.random() * 12);
-    let completeness = 80 + Math.floor(Math.random() * 16);
-    let clarity = 85 + Math.floor(Math.random() * 13);
-    let creativity = 75 + Math.floor(Math.random() * 21);
-    let structure = hasStructure ? (90 + Math.floor(Math.random() * 8)) : (70 + Math.floor(Math.random() * 15));
-    
-    if (len < 100) {
-      completeness = Math.max(50, completeness - 20);
+    const promptWords = promptText.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(/\s+/).filter((w) => w.length > 3);
+    let matchedWords = 0;
+    const respLower = responseText.toLowerCase();
+    for (const pw of promptWords) {
+      if (respLower.includes(pw)) matchedWords++;
     }
+    const overlapRatio = promptWords.length > 0 ? matchedWords / promptWords.length : 0.8;
+
+    const relevance = Math.min(100, Math.max(50, Math.round(70 + overlapRatio * 25)));
+    const completeness = Math.min(100, Math.max(40, Math.round(Math.min(words / 1.5, 95))));
+    const clarity = Math.min(100, Math.max(60, Math.round(80 + (hasStructure ? 10 : 0))));
+    const creativity = Math.min(100, Math.max(50, Math.round(75 + Math.min(len / 100, 20))));
+    const structure = hasStructure ? 92 : 72;
     
     const overall = Math.round((relevance + completeness + clarity + creativity + structure) / 5);
     

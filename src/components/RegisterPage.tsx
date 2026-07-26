@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion } from "motion/react";
-import { Sparkles, Mail, Lock, User, AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
+import { Sparkles, Mail, Lock, User, AlertCircle, ArrowLeft, Loader2, Compass } from "lucide-react";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "../firebase/firebase";
 import { useAuth } from "../contexts/AuthContext";
@@ -16,7 +16,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigate, onSucces
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, signInAsGuest } = useAuth();
 
   const handleEmailRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +39,9 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigate, onSucces
       onSuccess();
     } catch (err: any) {
       console.error(err);
-      if (err.code === "auth/email-already-in-use") {
+      if (err.code === "auth/operation-not-allowed") {
+        setError("Email/Password registration is disabled in Firebase Console. Enable Email/Password in Authentication > Sign-in method, or use Guest Mode below.");
+      } else if (err.code === "auth/email-already-in-use") {
         setError("This email address is already in use.");
       } else {
         setError(err.message || "E-mail registration failed. Please check details.");
@@ -56,7 +58,25 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigate, onSucces
       onSuccess();
     } catch (err: any) {
       console.error(err);
-      setError("Google authentication failed. Please try again.");
+      if (err.code === "auth/operation-not-allowed") {
+        setError("Google Sign-In is disabled in Firebase Console. Enable Google under Authentication > Sign-in method, or use Guest Mode.");
+      } else {
+        setError("Google authentication failed. Please try again or use Guest Mode.");
+      }
+    }
+  };
+
+  const handleGuestRegister = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      await signInAsGuest();
+      onSuccess();
+    } catch (err: any) {
+      console.error(err);
+      onSuccess();
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -190,8 +210,9 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigate, onSucces
               </div>
             </div>
 
-            <div className="mt-4">
+            <div className="mt-4 space-y-2.5">
               <button
+                type="button"
                 onClick={handleGoogleRegister}
                 className="w-full flex items-center justify-center py-2.5 px-4 border border-[#8FAF9B]/25 rounded-xl bg-[#FAF8F3]/50 hover:bg-[#FAF8F3] text-sm text-[#2F3A33] font-semibold transition-all cursor-pointer space-x-2.5"
               >
@@ -214,6 +235,15 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigate, onSucces
                   />
                 </svg>
                 <span>Google Account</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleGuestRegister}
+                className="w-full flex items-center justify-center py-2.5 px-4 border border-[#8FAF9B]/30 rounded-xl bg-white hover:bg-[#8FAF9B]/10 text-sm text-[#2F3A33] font-semibold transition-all cursor-pointer space-x-2 shadow-xs"
+              >
+                <Compass className="w-4 h-4 text-[#8FAF9B]" />
+                <span>Continue as Guest Practitioner</span>
               </button>
             </div>
           </div>

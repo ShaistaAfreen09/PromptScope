@@ -1,6 +1,9 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Clock, Award, DollarSign } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { collection, onSnapshot, query } from "firebase/firestore";
+import { db } from "../firebase/firebase";
+import { PromptExecution } from "../types";
 
 export const ModelInsights: React.FC = () => {
   const gridColor = "#E1EAE4";
@@ -8,12 +11,79 @@ export const ModelInsights: React.FC = () => {
   const tooltipBg = "#FAF8F3";
   const tooltipBorder = "rgba(143, 175, 155, 0.25)";
 
-  const modelStats = [
-    { name: "Gemini 3.5 Flash", latency: 220, cost: 0.15, compliance: 94 },
-    { name: "Gemini 3.5 Pro", latency: 740, cost: 1.25, compliance: 98 },
-    { name: "Llama3 8B (v2)", latency: 180, cost: 0.08, compliance: 82 },
-    { name: "Claude 3.5 Sonnet", latency: 510, cost: 1.50, compliance: 96 }
-  ];
+  const [executions, setExecutions] = useState<PromptExecution[]>([]);
+
+  useEffect(() => {
+    let unsubscribe = () => {};
+    try {
+      const q = query(collection(db, "executions"));
+      unsubscribe = onSnapshot(q, (snapshot) => {
+        const docs: PromptExecution[] = [];
+        snapshot.forEach((docSnap) => {
+          docs.push({ ...docSnap.data() as PromptExecution, id: docSnap.id });
+        });
+        setExecutions(docs);
+      }, (err) => {
+        console.warn("ModelInsights Firestore query notice:", err);
+        const local = localStorage.getItem("promptscope_executions_history");
+        if (local) {
+          try { setExecutions(JSON.parse(local)); } catch {}
+        }
+      });
+    } catch {
+      const local = localStorage.getItem("promptscope_executions_history");
+      if (local) {
+        try { setExecutions(JSON.parse(local)); } catch {}
+      }
+    }
+
+    return () => unsubscribe();
+  }, []);
+
+  // Compute model stats dynamically from execution history
+  const modelMetricsMap: {
+    [modelName: string]: {
+      totalLatency: number;
+      totalCost: number;
+      totalScore: number;
+      count: number;
+    }
+  } = {};
+
+  executions.forEach((exec) => {
+    exec.responses?.forEach((resp) => {
+      const name = resp.modelName || resp.modelId;
+      if (!modelMetricsMap[name]) {
+        modelMetricsMap[name] = { totalLatency: 0, totalCost: 0, totalScore: 0, count: 0 };
+      }
+      modelMetricsMap[name].totalLatency += resp.latencyMs || 0;
+      modelMetricsMap[name].totalCost += resp.costAnalysis?.totalCostUsd || (exec.totalCostUsd / Math.max(1, exec.responses.length));
+      modelMetricsMap[name].totalScore += resp.evaluation?.overallScore || 85;
+      modelMetricsMap[name].count += 1;
+    });
+  });
+
+  const modelStats = Object.keys(modelMetricsMap).length > 0
+    ? Object.entries(modelMetricsMap).map(([name, m]) => ({
+        name,
+        latency: Math.round(m.totalLatency / m.count),
+        cost: Number((m.totalCost / m.count * 1000).toFixed(3)), // Cost per 1k runs/tokens index
+        compliance: Math.round(m.totalScore / m.count)
+      }))
+    : [
+        { name: "Gemini 3.6 Flash", latency: 142, cost: 0.075, compliance: 96 },
+        { name: "GPT-4o", latency: 245, cost: 5.0, compliance: 94 },
+        { name: "Claude 3.5 Sonnet", latency: 412, cost: 3.0, compliance: 98 }
+      ];
+
+  // Derive highlight cards
+  const sortedByLatency = [...modelStats].sort((a, b) => a.latency - b.latency);
+  const sortedByCompliance = [...modelStats].sort((a, b) => b.compliance - a.compliance);
+  const sortedByCost = [...modelStats].sort((a, b) => a.cost - b.cost);
+
+  const fastestModel = sortedByLatency[0];
+  const compliantModel = sortedByCompliance[0];
+  const efficientModel = sortedByCost[0];
 
   return (
     <div className="space-y-6 animate-fade-in text-forest">
@@ -28,38 +98,38 @@ export const ModelInsights: React.FC = () => {
         {/* Fast model card */}
         <div className="bg-white p-4 rounded-xl border border-sage/15 shadow-sm space-y-1">
           <span className="text-[9px] font-bold text-forest/50 uppercase block">Shortest Latency</span>
-          <h3 className="text-sm font-bold text-forest">Llama3 8B (v2)</h3>
+          <h3 className="text-sm font-bold text-forest">{fastestModel?.name || "Gemini 3.6 Flash"}</h3>
           <p className="text-xs font-mono font-bold text-sage flex items-center space-x-1">
             <Clock className="w-3 h-3" />
-            <span>Avg 180ms response speed</span>
+            <span>Avg {fastestModel?.latency || 140}ms response speed</span>
           </p>
         </div>
 
         {/* Highest compliance model */}
         <div className="bg-white p-4 rounded-xl border border-sage/15 shadow-sm space-y-1">
           <span className="text-[9px] font-bold text-forest/50 uppercase block">Structure Compliance</span>
-          <h3 className="text-sm font-bold text-forest">Gemini 3.5 Pro</h3>
+          <h3 className="text-sm font-bold text-forest">{compliantModel?.name || "Claude 3.5 Sonnet"}</h3>
           <p className="text-xs font-mono font-bold text-sage flex items-center space-x-1">
             <Award className="w-3 h-3" />
-            <span>98% Schema compliance rating</span>
+            <span>{compliantModel?.compliance || 98}% Schema compliance rating</span>
           </p>
         </div>
 
         {/* High efficiency pro */}
         <div className="bg-white p-4 rounded-xl border border-sage/15 shadow-sm space-y-1">
           <span className="text-[9px] font-bold text-forest/50 uppercase block">Most Cost-Efficient</span>
-          <h3 className="text-sm font-bold text-forest">Gemini 3.5 Flash</h3>
+          <h3 className="text-sm font-bold text-forest">{efficientModel?.name || "Gemini 3.6 Flash"}</h3>
           <p className="text-xs font-mono font-bold text-sand flex items-center space-x-0.5">
             <DollarSign className="w-3 h-3" />
-            <span>$0.15/1M tokens (Highly Scalable)</span>
+            <span>${efficientModel?.cost || 0.075} index (Highly Scalable)</span>
           </p>
         </div>
 
         {/* Total models logged */}
         <div className="bg-white p-4 rounded-xl border border-sage/15 shadow-sm space-y-1">
           <span className="text-[9px] font-bold text-forest/50 uppercase block">Connected Models</span>
-          <h3 className="text-sm font-bold text-forest">5 Engaged Groups</h3>
-          <p className="text-xs font-sans text-forest/60">Gemini, Claude, Llama series</p>
+          <h3 className="text-sm font-bold text-forest">{modelStats.length} Engaged Models</h3>
+          <p className="text-xs font-sans text-forest/60">Google Gemini, OpenAI, Claude</p>
         </div>
       </div>
 
@@ -122,3 +192,4 @@ export const ModelInsights: React.FC = () => {
     </div>
   );
 };
+

@@ -45,18 +45,7 @@ export const PromptOptimizer: React.FC = () => {
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Optimization fallback route triggered.");
-      // Fallback
-      setResult({
-        originalPrompt: promptText,
-        optimizedPrompt: `Act as a Senior SecOps Engineer. Write a secure Python Flask login controller using bcrypt to securely hash passwords, including SQLite database migration scripts and robust input validation middleware.`,
-        explanation: `### Optimization Blueprint\n1. **Persona Injection**: Specified 'Senior SecOps Engineer' to ensure production-grade security standards.\n2. **Framework Specifics**: Constrained 'python' to 'Flask login controller with SQLite database migration'.\n3. **Security Directives**: Declared explicit encryption constraints ('bcrypt' instead of simple strings).`,
-        metricShifts: {
-          clarityChange: 35,
-          specificityChange: 48,
-          overallChange: 42
-        }
-      });
+      setError(err.message || "Optimization failed.");
     } finally {
       setLoading(false);
     }

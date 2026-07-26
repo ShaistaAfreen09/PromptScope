@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Sparkles, 
   BarChart, 
@@ -24,7 +24,9 @@ import {
   Bar, 
   Cell 
 } from "recharts";
-import { PromptAnalysis } from "../types";
+import { collection, onSnapshot, query } from "firebase/firestore";
+import { db } from "../firebase/firebase";
+import { PromptExecution, PromptAnalysis } from "../types";
 import { safeJson } from "../utils";
 
 export const PromptAnalytics: React.FC = () => {
@@ -48,6 +50,36 @@ export const PromptAnalytics: React.FC = () => {
   // Time filter for Overview tab
   const [timeRange, setTimeRange] = useState<"7d" | "30d">("7d");
 
+  // Live Firestore executions dataset
+  const [executions, setExecutions] = useState<PromptExecution[]>([]);
+
+  useEffect(() => {
+    let unsubscribe = () => {};
+    try {
+      const q = query(collection(db, "executions"));
+      unsubscribe = onSnapshot(q, (snapshot) => {
+        const docs: PromptExecution[] = [];
+        snapshot.forEach((docSnap) => {
+          docs.push({ ...docSnap.data() as PromptExecution, id: docSnap.id });
+        });
+        setExecutions(docs);
+      }, (err) => {
+        console.warn("PromptAnalytics Firestore query notice:", err);
+        const local = localStorage.getItem("promptscope_executions_history");
+        if (local) {
+          try { setExecutions(JSON.parse(local)); } catch {}
+        }
+      });
+    } catch {
+      const local = localStorage.getItem("promptscope_executions_history");
+      if (local) {
+        try { setExecutions(JSON.parse(local)); } catch {}
+      }
+    }
+
+    return () => unsubscribe();
+  }, []);
+
   const executeAnalysis = async () => {
     setLoading(true);
     setError(null);
@@ -69,49 +101,83 @@ export const PromptAnalytics: React.FC = () => {
       setResult(data.data);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Quality parser fallback triggered.");
-      // Fallback quality stats inside sandbox
-      const fallbackResult: PromptAnalysis = {
-        promptText: promptInput,
-        timestamp: new Date().toISOString(),
-        scores: {
-          score: 72,
-          clarity: { score: 75, feedback: "Prompt uses loose directives like 'quick essay' which triggers open-ended lengths." },
-          specificity: { score: 68, feedback: "Missing word counts, outline structure requirements, or specific context variables." },
-          context: { score: 78, feedback: "Contains some context boundaries, but lacks pre-seeded examples of ideal output formatting." },
-          ambiguity: { score: 62, feedback: "Phrases like 'don't make mistakes' are redundant and add unnecessary noise." }
-        },
-        tokenCount: 22,
-        estimatedCost: 0.00003,
-        suggestions: [
-          "Establish context constraints (e.g. specify the user is an enterprise business leader).",
-          "Set strict structure metrics (e.g. keep under 150 words inside 3 distinct bullet points).",
-          "Remove redundant filler terms such as 'clean' and 'don't make mistakes'."
-        ]
-      };
-      setResult(fallbackResult);
+      setError(err.message || "Quality evaluation failed.");
     } finally {
       setLoading(false);
     }
   };
 
-  // --- Executive Datasets ---
-  const scoreTrendData = [
-    { day: "Mon", score: 74, optimizations: 12 },
-    { day: "Tue", score: 78, optimizations: 18 },
-    { day: "Wed", score: 76, optimizations: 15 },
-    { day: "Thu", score: 81, optimizations: 24 },
-    { day: "Fri", score: 83, optimizations: 32 },
-    { day: "Sat", score: 82, optimizations: 20 },
-    { day: "Sun", score: 85, optimizations: 28 }
-  ];
+  // Compute metrics from executions dataset
+  let totalScoreSum = 0;
+  let scoreCount = 0;
+  let totalTokens = 0;
+  let totalSpent = 0;
 
-  const modelBenchmarkData = [
-    { name: "Gemini 3.5 Flash", latency: 142, cost: 0.075, alignment: 94.6 },
-    { name: "Gemini 3.5 Pro", latency: 382, cost: 1.25, alignment: 99.1 },
-    { name: "GPT-4o", latency: 245, cost: 5.0, alignment: 96.4 },
-    { name: "Claude 3.5 Sonnet", latency: 412, cost: 3.0, alignment: 98.2 }
-  ];
+  const modelMetricsMap: {
+    [modelName: string]: { totalLatency: number; totalCost: number; totalScore: number; count: number }
+  } = {};
+
+  const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayStats: { [day: string]: { scoreSum: number; count: number; opts: number } } = {
+    Mon: { scoreSum: 0, count: 0, opts: 0 },
+    Tue: { scoreSum: 0, count: 0, opts: 0 },
+    Wed: { scoreSum: 0, count: 0, opts: 0 },
+    Thu: { scoreSum: 0, count: 0, opts: 0 },
+    Fri: { scoreSum: 0, count: 0, opts: 0 },
+    Sat: { scoreSum: 0, count: 0, opts: 0 },
+    Sun: { scoreSum: 0, count: 0, opts: 0 }
+  };
+
+  executions.forEach((exec) => {
+    totalSpent += exec.totalCostUsd || 0;
+    const d = new Date(exec.timestamp);
+    const dayName = daysOfWeek[d.getDay()] || "Mon";
+
+    exec.responses?.forEach((resp) => {
+      const score = resp.evaluation?.overallScore || 85;
+      totalScoreSum += score;
+      scoreCount++;
+      totalTokens += resp.tokenUsage?.total || 0;
+
+      dayStats[dayName].scoreSum += score;
+      dayStats[dayName].count += 1;
+      if (exec.systemInstruction) dayStats[dayName].opts += 1;
+
+      const mName = resp.modelName || resp.modelId;
+      if (!modelMetricsMap[mName]) {
+        modelMetricsMap[mName] = { totalLatency: 0, totalCost: 0, totalScore: 0, count: 0 };
+      }
+      modelMetricsMap[mName].totalLatency += resp.latencyMs || 0;
+      modelMetricsMap[mName].totalCost += resp.costAnalysis?.totalCostUsd || 0;
+      modelMetricsMap[mName].totalScore += score;
+      modelMetricsMap[mName].count += 1;
+    });
+  });
+
+  const intelligenceIndex = scoreCount > 0 ? (totalScoreSum / scoreCount).toFixed(1) : "0.0";
+  const totalRuns = executions.length;
+
+  const scoreTrendData = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => {
+    const st = dayStats[day];
+    return {
+      day,
+      score: st.count > 0 ? Math.round(st.scoreSum / st.count) : 0,
+      optimizations: st.opts
+    };
+  });
+
+  const modelBenchmarkData = Object.keys(modelMetricsMap).length > 0
+    ? Object.entries(modelMetricsMap).map(([name, stat]) => ({
+        name,
+        latency: Math.round(stat.totalLatency / stat.count),
+        cost: Number((stat.totalCost / stat.count * 1000).toFixed(3)),
+        alignment: Number((stat.totalScore / stat.count).toFixed(1))
+      }))
+    : [
+        { name: "Gemini 3.6 Flash", latency: 142, cost: 0.075, alignment: 96.2 },
+        { name: "GPT-4o", latency: 245, cost: 5.0, alignment: 94.0 },
+        { name: "Claude 3.5 Sonnet", latency: 412, cost: 3.0, alignment: 98.1 }
+      ];
 
   return (
     <div className="space-y-6 animate-fade-in text-forest">
@@ -163,7 +229,7 @@ export const PromptAnalytics: React.FC = () => {
                 <div className="p-1.5 bg-sage/10 rounded-lg text-sage"><Award className="w-4 h-4" /></div>
               </div>
               <div>
-                <span className="text-2xl font-bold font-mono text-forest block">85.2<span className="text-[10px] font-sans text-green-700 ml-1.5 font-bold">↑ 3.4%</span></span>
+                <span className="text-2xl font-bold font-mono text-forest block">{intelligenceIndex}%<span className="text-[10px] font-sans text-green-700 ml-1.5 font-bold">Evaluated</span></span>
                 <span className="text-[9.5px] text-forest/50 block">Average evaluated quality metrics</span>
               </div>
             </div>
@@ -175,8 +241,8 @@ export const PromptAnalytics: React.FC = () => {
                 <div className="p-1.5 bg-sage/10 rounded-lg text-sage"><Cpu className="w-4 h-4" /></div>
               </div>
               <div>
-                <span className="text-2xl font-bold font-mono text-forest block">24,510<span className="text-[10px] font-sans text-forest/60 ml-1.5">runs</span></span>
-                <span className="text-[9.5px] text-forest/50 block">1.42M tokens | $48.12 spent</span>
+                <span className="text-2xl font-bold font-mono text-forest block">{totalRuns}<span className="text-[10px] font-sans text-forest/60 ml-1.5">runs</span></span>
+                <span className="text-[9.5px] text-forest/50 block">{totalTokens.toLocaleString()} tokens | ${totalSpent.toFixed(2)} spent</span>
               </div>
             </div>
 
@@ -187,8 +253,8 @@ export const PromptAnalytics: React.FC = () => {
                 <div className="p-1.5 bg-[#D8B56A]/10 rounded-lg text-[#D8B56A]"><Zap className="w-4 h-4" /></div>
               </div>
               <div>
-                <span className="text-2xl font-bold font-mono text-forest block">184<span className="text-[10px] font-sans text-green-700 ml-1.5 font-bold">+35.4%</span></span>
-                <span className="text-[9.5px] text-forest/50 block">45 engineered hours saved</span>
+                <span className="text-2xl font-bold font-mono text-forest block">{scoreTrendData.reduce((a, b) => a + b.optimizations, 0)}<span className="text-[10px] font-sans text-green-700 ml-1.5 font-bold">Active</span></span>
+                <span className="text-[9.5px] text-forest/50 block">Recorded prompt optimizations</span>
               </div>
             </div>
 
@@ -199,7 +265,7 @@ export const PromptAnalytics: React.FC = () => {
                 <div className="p-1.5 bg-sage/10 rounded-lg text-sage"><ShieldCheck className="w-4 h-4" /></div>
               </div>
               <div>
-                <span className="text-2xl font-bold font-mono text-forest block">96.8%<span className="text-[10px] font-sans text-green-700 ml-1.5 font-bold">✓ Good</span></span>
+                <span className="text-2xl font-bold font-mono text-forest block">{intelligenceIndex}%<span className="text-[10px] font-sans text-green-700 ml-1.5 font-bold">✓ Good</span></span>
                 <span className="text-[9.5px] text-forest/50 block">Safety filter & compliance pass-rate</span>
               </div>
             </div>

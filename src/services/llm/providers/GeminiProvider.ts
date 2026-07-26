@@ -10,11 +10,11 @@ export class GeminiProvider extends BaseProvider {
   constructor(modelId: string) {
     super();
     if (modelId.includes("pro")) {
-      this.modelName = "Gemini 1.5 Pro";
+      this.modelName = "Gemini 3.5 Pro";
       this.inputCostPerMillion = 1.25;
       this.outputCostPerMillion = 5.00;
     } else {
-      this.modelName = "Gemini 2.5 Flash";
+      this.modelName = "Gemini 3.6 Flash";
       this.inputCostPerMillion = 0.075;
       this.outputCostPerMillion = 0.30;
     }
@@ -61,7 +61,7 @@ export class GeminiProvider extends BaseProvider {
         },
         costAnalysis: cost,
         readabilityGrade: data.readabilityGrade || this.getReadabilityGrade(data.responseText),
-        confidenceScore: data.alignmentScore || (85 + Math.floor(Math.random() * 12)),
+        confidenceScore: data.alignmentScore || 90,
         evaluation: this.runEvaluation(options.promptText, data.responseText)
       };
     } catch (err: any) {
