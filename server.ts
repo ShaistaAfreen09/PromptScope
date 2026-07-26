@@ -983,22 +983,7 @@ try {
 } catch (err) {
   console.log("AI summary generation for report unavailable or rate-limited.");
   aiSummary = `💡 Executive Summary for ${title}: Analytical metrics confirm optimal alignment and token cost efficiency across all tested prompt variants.`;
-}
-  try {
-    const gemini = globalProviderRegistry.getProviderByName("Google");
-    if (gemini && (await gemini.healthCheck())) {
-      const summaryResponse = await gemini.generate({
-        modelId: "gemini-3.6-flash",
-        promptText: `Write an executive summary analysis findings paragraph (maximum 3 sentences, started with a lightbulb icon 💡) for a prompt engineering report titled "${title}" of type "${reportType}". Be professional, concise, and technical.`
-      });
-      aiSummary = summaryResponse.response?.trim() || "";
-    } else {
-      aiSummary = `💡 Executive Summary for ${title}: Analytical metrics confirm optimal alignment and token cost efficiency across all tested prompt variants.`;
-    }
-  } catch (err) {
-    console.log("AI summary generation for report unavailable or rate-limited.");
-    aiSummary = `💡 Executive Summary for ${title}: Analytical metrics confirm optimal alignment and token cost efficiency across all tested prompt variants.`;
-  }
+
 
   const newReport: StoredReport = {
     id: `rep-${Date.now()}`,
