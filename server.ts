@@ -303,7 +303,7 @@ ${promptText}`,
       "Failed to analyze prompt with Gemini provider.",
   });
 }
-  const geminiModelName = geminiModelResolution.modelName;
+
 
   if (ai) {
     try {
@@ -462,10 +462,12 @@ app.post("/api/execute-llm", async (req, res) => {
   } else if (modelId === "claude-3-5-sonnet") {
     Pricing = { inputPerMillion: 3.00, outputPerMillion: 15.00 };
     chosenModelName = "Claude 3.5 Sonnet (Anthropic)";
-  } else {
-    Pricing = { inputPerMillion: 0.075, outputPerMillion: 0.30 };
-    chosenModelName = "Gemini 3.5 Flash (Google)";
-  const isHealthy = await provider.healthCheck();
+} else {
+  Pricing = { inputPerMillion: 0.075, outputPerMillion: 0.30 };
+  chosenModelName = "Gemini 3.5 Flash (Google)";
+}
+
+const isHealthy = await provider.healthCheck();
   if (!isHealthy) {
     return res.status(503).json({
       success: false,
@@ -496,69 +498,9 @@ app.post("/api/execute-llm", async (req, res) => {
         finishReason: response.finishReason,
         confidenceScore: response.confidence
       }
+    };
 
-      const mergedSystemInstruction = `${systemInstruction || ""}
       
-      [System Meta Instruction]: ${stylingPrompt}`;
-
-      console.log("Executing Gemini request using model:", geminiModelName);
-      const response = await ai.models.generateContent({
-        model: geminiModelName,
-        contents: promptText,
-        config: {
-          systemInstruction: mergedSystemInstruction,
-          temperature: modelId === "gpt-4o" ? 0.7 : modelId === "claude-3-5-sonnet" ? 0.5 : 1.0,
-        }
-      });
-
-      const responseText = response.text || "No response received.";
-      const latencyMs = Date.now() - startTime;
-
-      // Real token usage
-      const promptChars = promptText.length + (systemInstruction?.length || 0);
-      const completionChars = responseText.length;
-      const promptTokens = Math.ceil(promptChars / 4);
-      const completionTokens = Math.ceil(completionChars / 4);
-      const totalTokens = promptTokens + completionTokens;
-
-      // Realistic Costing calculations based on real token count & selected tier pricing
-      const costInput = (promptTokens / 1000000) * Pricing.inputPerMillion;
-      const costOutput = (completionTokens / 1000000) * Pricing.outputPerMillion;
-      const estimatedCostUsd = parseFloat((costInput + costOutput).toFixed(6));
-
-      // Alignment computation (Gemini rates its alignment with initial instructions)
-      console.log("Executing Gemini request using model:", geminiModelName);
-      const alignmentCheck = await ai.models.generateContent({
-        model: geminiModelName,
-        contents: `Rate the alignment of the Response relative to the Prompt instruction:
-Prompt: "${promptText}"
-Response: "${responseText}"
-Rate it as an integer from 0 (completely unrelated) to 100 (exactly followed every detail). Give ONLY the integer as output.`,
-      });
-
-      const parsedAlignment = parseInt(alignmentCheck.text?.trim() || "94");
-      const alignmentScore = isNaN(parsedAlignment) ? 94 : Math.min(100, Math.max(0, parsedAlignment));
-
-      // Calculate readability grade level
-      const readabilityGrade = calculateReadabilityGrade(responseText);
-
-      return res.json({
-        success: true,
-        data: {
-          modelId,
-          modelName: chosenModelName,
-          responseText,
-          latencyMs,
-          tokenUsage: {
-            prompt: promptTokens,
-            completion: completionTokens,
-            total: totalTokens
-          },
-          estimatedCostUsd,
-          alignmentScore,
-          readabilityGrade
-        }
-      });
 
     } catch (err: unknown) {
       logGeminiError("Gemini playground execution error:", err);
