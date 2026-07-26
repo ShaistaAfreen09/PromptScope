@@ -475,45 +475,37 @@ const isHealthy = await provider.healthCheck();
     });
   }
 
-  try {
-    const response = await provider.generate({
-      modelId: targetModel,
-      promptText,
-      systemInstruction,
-      temperature
-    });
+ try {
+  const response = await provider.generate({
+    modelId: targetModel,
+    promptText,
+    systemInstruction,
+    temperature,
+  });
 
-    return res.json({
-      success: true,
-      data: {
-        modelId: response.model,
-        modelName: response.model,
-        provider: response.provider,
-        responseText: response.response,
-        latencyMs: response.latency,
-        tokenUsage: response.tokens,
-        estimatedCostUsd: response.cost.totalCostUsd,
-        alignmentScore: response.alignment,
-        readabilityGrade: response.readabilityGrade || "Intermediate",
-        finishReason: response.finishReason,
-        confidenceScore: response.confidence
-      }
-    });
-
-      
-
-    } catch (err: unknown) {
-      logGeminiError("Gemini playground execution error:", err);
-      // Fall through to mock output by letting execution proceed
-    }
-    });
-  } catch (err: any) {
-    console.error("LLM Execution Error:", err);
-    return res.status(500).json({
-      success: false,
-      error: err.message || "Failed to execute LLM request."
-    });
-  }
+  return res.json({
+    success: true,
+    data: {
+      modelId: response.model,
+      modelName: response.model,
+      provider: response.provider,
+      responseText: response.response,
+      latencyMs: response.latency,
+      tokenUsage: response.tokens,
+      estimatedCostUsd: response.cost.totalCostUsd,
+      alignmentScore: response.alignment,
+      readabilityGrade: response.readabilityGrade || "Intermediate",
+      finishReason: response.finishReason,
+      confidenceScore: response.confidence,
+    },
+  });
+} catch (err: any) {
+  console.error("LLM Execution Error:", err);
+  return res.status(500).json({
+    success: false,
+    error: err.message || "Failed to execute LLM request."
+  });
+}
 });
 
 
