@@ -295,7 +295,6 @@ ${promptText}`,
   });
 } catch (err: any) {
   console.error("Prompt Analysis Error:", err);
-
   return res.status(500).json({
     success: false,
     error:
@@ -304,68 +303,32 @@ ${promptText}`,
   });
 }
 
+}); 
+// 2. Prompt Optimizer Endpoint
+app.post("/api/optimize-prompt", async (req, res) => {
+  const { promptText, systemInstruction, targetGoal } = req.body;
 
-  if (ai) {
-    try {
-      const systemContext = `You are PromptScope Optimizer, the world's finest prompt tuner.
-Analyze the prompt, rewrite it to be extremely effective, structured, and context-rich incorporating professional engineering techniques like:
-- Role assignment / Persona definition
-- Few-shot examples (if applicable)
-- Output format styling (Markdown, Markdown Tables, JSON, etc.)
-- Clear negative constraints (what to avoid)
+  if (!promptText || promptText.trim() === "") {
+    return res.status(400).json({
+      success: false,
+      error: "Prompt text is required."
+    });
+  }
 
-You must return JSON containing:
-1. optimizedPrompt: The rewritten prompt.
-2. explanation: A rich markdown explanation detailing what was improved and why.
-3. clarityChange: An estimated percentage improve (e.g. 15 for +15%)
-4. specificityChange: An estimated percentage improve (e.g. 25 for +25%)
-5. overallChange: An overall quality score improvement (e.g. 20 for +20%)`;
+  const startTime = Date.now();
 
-      console.log("Executing Gemini request using model:", geminiModelName);
-      const response = await ai.models.generateContent({
-        model: geminiModelName,
-        contents: `Original Prompt: "${promptText}"
-Original System Instruction: "${systemInstruction || "None"}"
-Optimization Target Goal: "${targetGoal || "General quality, clear phrasing, and rich constraints"}"`,
-        config: {
-          systemInstruction: systemContext,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              optimizedPrompt: { type: Type.STRING },
-              explanation: { type: Type.STRING },
-              clarityChange: { type: Type.INTEGER },
-              specificityChange: { type: Type.INTEGER },
-              overallChange: { type: Type.INTEGER }
-            },
-            required: ["optimizedPrompt", "explanation", "clarityChange", "specificityChange", "overallChange"]
-          }
-        }
-      });
+  const gemini = globalProviderRegistry.getProviderByName("Google");
 
-      const dataStr = response.text || "{}";
-      const parsed = JSON.parse(dataStr);
+  const geminiModelResolution = resolveGeminiModelName(process.env.GEMINI_MODEL_NAME);
+  if (!geminiModelResolution.isSupported) {
+    return res.status(400).json({
+      success: false,
+      error: geminiModelResolution.error
+    });
+  }
 
-      return res.json({
-        success: true,
-        data: {
-          originalPrompt: promptText,
-          optimizedPrompt: parsed.optimizedPrompt,
-          explanation: parsed.explanation,
-          metricShifts: {
-            clarityChange: parsed.clarityChange || 12,
-            specificityChange: parsed.specificityChange || 18,
-            overallChange: parsed.overallChange || 15
-          },
-          latencyMs: Date.now() - startTime
-        }
-      });
+  const geminiModelName = geminiModelResolution.modelName;
 
-    } catch (err: unknown) {
-      logGeminiError("Gemini optimization error:", err);
-      // Fall through to mock output by letting execution proceed
-    }
   if (!gemini || !(await gemini.healthCheck())) {
     return res.status(503).json({
       success: false,
@@ -433,7 +396,7 @@ Optimization Target Goal: "${targetGoal || "General quality, high specificity, c
     });
   }
 
-
+});
 // 3. Single LLM Provider Execution Endpoint
 app.post("/api/execute-llm", async (req, res) => {
   const { modelId, promptText, systemInstruction, temperature } = req.body;
@@ -445,12 +408,7 @@ app.post("/api/execute-llm", async (req, res) => {
   const targetModel = modelId || "gemini-3.6-flash";
   const provider = globalProviderRegistry.getProviderForModel(targetModel);
 
-  const geminiModelResolution = resolveGeminiModelName(process.env.GEMINI_MODEL_NAME);
-  if (!geminiModelResolution.isSupported) {
-    return res.status(400).json({ success: false, error: geminiModelResolution.error });
-  }
 
-  const geminiModelName = geminiModelResolution.modelName;
 
   // Model Metadata Calculations
   let Pricing = { inputPerMillion: 0.075, outputPerMillion: 0.3 };
