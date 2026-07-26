@@ -81,84 +81,59 @@ app.post("/api/analyze-prompt", async (req, res) => {
   const startTime = Date.now();
   const gemini = globalProviderRegistry.getProviderByName("Google");
 
-  const geminiModelResolution = resolveGeminiModelName(process.env.GEMINI_MODEL_NAME);
-  if (!geminiModelResolution.isSupported) {
-    return res.status(400).json({ success: false, error: geminiModelResolution.error });
-  }
+const geminiModelResolution = resolveGeminiModelName(process.env.GEMINI_MODEL_NAME);
+if (!geminiModelResolution.isSupported) {
+  return res.status(400).json({
+    success: false,
+    error: geminiModelResolution.error
+  });
+}
 
-  const geminiModelName = geminiModelResolution.modelName;
+const geminiModelName = geminiModelResolution.modelName;
 
-  if (ai) {
-    try {
-      const systemContext = `You are PromptScope AI, an elite prompt engineer. Analyze the provided prompt and return a structured JSON assessment of its attributes.
+if (!gemini || !(await gemini.healthCheck())) {
+  return res.status(503).json({
+    success: false,
+    error: "Google Gemini provider is disabled or missing API key."
+  });
+}
+
+try {
+  const systemContext = `You are PromptScope AI, an elite prompt engineer. Analyze the provided prompt and return a structured JSON assessment.
+
 Evaluate 4 metrics from 0 to 100:
-1. Clarity (how clear and understandable the goal is)
-2. Specificity (how precise and detailed constraints/requirements are)
-3. Context (the richness of background information, examples or few-shots)
-4. Ambiguity (how free of confusing, conflicting, or open-ended phrasing it is)
-  if (!gemini || !(await gemini.healthCheck())) {
-    return res.status(503).json({
-      success: false,
-      error: "Google Gemini provider is disabled or missing API key."
-    });
-  }
+1. Clarity
+2. Specificity
+3. Context
+4. Ambiguity
 
-  try {
-    const systemContext = `You are PromptScope AI, an elite prompt engineer. Analyze the provided prompt and return a structured JSON assessment.
-Evaluate 4 metrics from 0 to 100: clarity, specificity, context, ambiguity.
-Provide an overall weighted score, token count, and suggestions.
-Return ONLY valid raw JSON with this exact structure:
+Provide an overall weighted score, token count and suggestions.
+
+Return ONLY valid JSON with this structure:
 {
-  "score": 85,
-  "clarity": { "score": 85, "feedback": "Explanation..." },
-  "specificity": { "score": 80, "feedback": "Explanation..." },
-  "context": { "score": 90, "feedback": "Explanation..." },
-  "ambiguity": { "score": 88, "feedback": "Explanation..." },
-  "suggestions": ["Suggestion 1", "Suggestion 2"],
-  "estimatedTokenCount": 42
+  "score":85,
+  "clarity":{"score":85,"feedback":"..."},
+  "specificity":{"score":80,"feedback":"..."},
+  "context":{"score":90,"feedback":"..."},
+  "ambiguity":{"score":88,"feedback":"..."},
+  "suggestions":["Suggestion 1","Suggestion 2"],
+  "estimatedTokenCount":42
 }`;
 
-      console.log("Executing Gemini request using model:", geminiModelName);
-      const response = await ai.models.generateContent({
-        model: geminiModelName,
-        contents: `Analyze the following prompt and system context:
-    const response = await gemini.generate({
-      modelId: "gemini-3.6-flash",
-      promptText: `Analyze the following prompt:
-System Instruction: ${systemInstruction || "None"}
-Prompt Text: "${promptText}"`,
-      systemInstruction: systemContext,
-      temperature: 0.2
-    });
+  const response = await gemini.generate({
+    modelId: geminiModelName,
+    promptText: `Analyze the following prompt:
 
-      const latencyMs = Date.now() - startTime;
-      const dataStr = response.text || "{}";
-      const parsed = JSON.parse(dataStr);
+System Instruction:
+${systemInstruction || "None"}
 
-      // Gemini Pricing: $0.075 / 1M Input, $0.3 / 1M Output
-      const tokens = parsed.estimatedTokenCount || Math.ceil(promptText.length / 4);
-      const inputCost = (promptText.length / 4000000) * 0.075;
-      const outputCost = (dataStr.length / 4000000) * 0.3;
-      const estimatedCost = parseFloat((inputCost + outputCost).toFixed(7));
+Prompt Text:
+${promptText}`,
+    systemInstruction: systemContext,
+    temperature: 0.2
+  });
 
-      return res.json({
-        success: true,
-        data: {
-          promptText,
-          timestamp: new Date().toISOString(),
-          scores: {
-            score: parsed.score || 70,
-            clarity: parsed.clarity || { score: 70, feedback: "A standard prompt structure." },
-            specificity: parsed.specificity || { score: 70, feedback: "Could be more specific." },
-            context: parsed.context || { score: 70, feedback: "Lacks detail or external examples." },
-            ambiguity: parsed.ambiguity || { score: 70, feedback: "Some phrases remain generic." }
-          },
-          tokenCount: tokens,
-          estimatedCost,
-          suggestions: parsed.suggestions || ["Add constraints", "Give custom response formats."],
-          latencyMs
-        }
-      });
+  const latencyMs = Date.now() - startTime;
 
     } catch (err: unknown) {
       logGeminiError("Gemini live analysis error:", err);
