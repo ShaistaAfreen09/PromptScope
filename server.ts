@@ -302,8 +302,6 @@ ${promptText}`,
       "Failed to analyze prompt with Gemini provider.",
   });
 }
-
-}); 
 // 2. Prompt Optimizer Endpoint
 app.post("/api/optimize-prompt", async (req, res) => {
   const { promptText, systemInstruction, targetGoal } = req.body;
