@@ -432,7 +432,6 @@ Optimization Target Goal: "${targetGoal || "General quality, high specificity, c
       error: err.message || "Failed to optimize prompt with Gemini API."
     });
   }
-});
 
 
 // 3. Single LLM Provider Execution Endpoint
