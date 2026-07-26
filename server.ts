@@ -973,6 +973,7 @@ res.json({
   success: true,
   report: newReport
 });
+});
 // Stream Export Data (CSV or JSON)
 app.get("/api/reports/download/:id", (req, res) => {
   const { id } = req.params;
