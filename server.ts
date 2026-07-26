@@ -983,34 +983,40 @@ try {
 } catch (err) {
   console.log("AI summary generation for report unavailable or rate-limited.");
   aiSummary = `💡 Executive Summary for ${title}: Analytical metrics confirm optimal alignment and token cost efficiency across all tested prompt variants.`;
+}
 
+const newReport: StoredReport = {
+  id: `rep-${Date.now()}`,
+  title,
+  reportType,
+  format,
+  createdAt: new Date().toISOString(),
+  data: aggregatedData,
+  aiSummary: aiSummary || undefined
+};
 
-  const newReport: StoredReport = {
-    id: `rep-${Date.now()}`,
-    title,
-    reportType,
-    format,
-    createdAt: new Date().toISOString(),
-    data: aggregatedData,
-    aiSummary: aiSummary || undefined
-  };
+sandboxReports.unshift(newReport);
 
-  sandboxReports.unshift(newReport);
-  recordAuditLog("REPORT_GENERATE", `Generated high-fidelity ${reportType} report`, req, "low");
+recordAuditLog(
+  "REPORT_GENERATE",
+  `Generated high-fidelity ${reportType} report`,
+  req,
+  "low"
+);
 
-  // Queue system notification
-  sandboxNotifications.unshift({
-    id: `notif-${Date.now()}`,
-    title: "Prompt Optimization Report Ready",
-    message: `Your compiled audit report "${title}" was generated in ${format.toUpperCase()} format.`,
-    type: "report",
-    isRead: false,
-    createdAt: new Date().toISOString()
-  });
-
-  res.json({ success: true, report: newReport });
+sandboxNotifications.unshift({
+  id: `notif-${Date.now()}`,
+  title: "Prompt Optimization Report Ready",
+  message: `Your compiled audit report "${title}" was generated in ${format.toUpperCase()} format.`,
+  type: "report",
+  isRead: false,
+  createdAt: new Date().toISOString()
 });
 
+res.json({
+  success: true,
+  report: newReport
+});
 // Stream Export Data (CSV or JSON)
 app.get("/api/reports/download/:id", (req, res) => {
   const { id } = req.params;
